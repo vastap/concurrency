@@ -6,63 +6,96 @@
 - [Runnable](#Runnable)
 - [Callable and FutureTask](#Callable)
 - [Executor](#Executor)
+- [ThreadPoolExecutor](#ThreadPoolExecutor)
 - [Executor Service](#ExecutorService)
+- [Executor Service Static Methods](#ExecutorServiceStaticMethods)
 - [ScheduledExecutorService](#ScheduledExecutorService)
 - [ForkJoinPool](#ForkJoinPool)
 
 ## [↑](#Home) <a name="Overview"></a> Обзор
-Дано: Базовый класс HelloWorld
-```java
-public class App {
+Для проб нам понадобится: [Sublime Text 3](https://www.sublimetext.com/3). Он весит всего около 8.5 мб, в отличии от остальных монстров.
+При первой установке отсутствует важный инструмент - Package Control. Для его установки необходимо не выходя из Sublime Text через главное меню выбрать "Tools" → "Install Package Control".
 
+Нам нужно для Sublime Text 3 настроить сборки, то есть Build System. Для этого:
+- Выбрать в меню "Tools" -> "Build System" -> "New Build system"
+- Указать между фигурными скобками: "cmd": ["java", "$file_base_name"]
+- Нажать Ctrl+S
+- Сохранить под названием: **Java.sublime-build**
+
+Далее, возьмём за основу пример [Oracle Hello World Example](https://docs.oracle.com/javase/tutorial/getStarted/application/index.html):
+```java
+class HelloWorldApp {
     public static void main(String[] args) {
-        System.out.println("Hello, World!");
+        System.out.println("Hello World!"); // Display the string.
     }
+}
+```
+И сохраняем его как **HelloWorldApp.java**.
+После этого, в меню выбираем "Tools" -> "Build With" (а лучше пользуемся HotKey), выбираем JavaC (компилятор Java).
+После этого через Build With выбираем ранее сохранённый профиль из Java.sublime-build. В результате мы увидим на консоле тот самый текст Hello World.
 
+Давайте теперь изменим метод main:
+```java
+public static void main(String[] args) {
+	while(true) {}
 }
 ```
-Запустив программу на выполнение, мы увидим в консоли фразу "Hello, World!".
-Теперь, давайте добавим в метод main ещё одну строчку кода:
-```java
-throw new IllegalStateException("Something wrong");
+Скомпилируем (JavaC) и запустим (Java).
+Теперь, воспользуемся **[Java Virtual Machine Process Status Tool](https://docs.oracle.com/javase/7/docs/technotes/tools/share/jps.html)**. Например, в Windows мы можем нажать **Win+R**, выполнить **cmd**. Выполняем команду **jps**.
+Мы видим список всех **Java процессов**, запущенных в текущий момент. В том числе мы увидим строчку вида: ```56508 HelloWorldApp```. Первое число будет меняться и представляет собой **Process Id (pid)**.
+Про процессы рекомендуется прочитать в статье "[Многопоточность в Java](https://habrahabr.ru/post/164487/)", а так же в ответах из "[Собеседование по Java — многопоточность (вопросы и ответы)](http://javastudy.ru/interview/concurrent/)".
+
+Теперь давайте воспользуемся стандартной утилитой: [Jstack](https://docs.oracle.com/javase/6/docs/technotes/tools/share/jstack.html). В командной строке выполним: **jstack 56508**, где номер - это наш найденный pid.
+Мы увидим, что написано: ```Full thread dump```, то есть это дамп потоков.
+Дамп потоков содержит список всех потоков, из которых состоит наш процесс, на момент выполнения команды.
+
+Так же мы можем воспользоваться UI утилитой, входящей в поставку JDK: [jvisualvm](https://docs.oracle.com/javase/7/docs/technotes/guides/visualvm/index.html). Её тоже можно запустить сразу для нужного процесса, например: **jvisualvm --openpid 56508**.
+В данной утилите на вкладке Threads мы увидим все текущие потоки:
+![](./jvisualvm.png)
+Кнокой **Thread Dump** в отдельной вкладке можно открыть Thread Dump текущего состояния. Там можно будет увидеть, какие потоки сейчас есть и в каком они состоянии.
+
+Итак, получается, что внутри одного процесса выполняется множество потоков, называемых Thread.
+Поиск в гугле по **"java thread"** выдаст одной из первых ссылку на Java API: [java.lang.Thread](https://docs.oracle.com/javase/7/docs/api/java/lang/Thread.html).
+Тут стоит обратить внимание на это:
 ```
-При выполнении в консоли увидим что-то вроде:
+When a Java Virtual Machine starts up, there is usually a single non-daemon thread (which typically calls the method named main of some designated class).
 ```
-Exception in thread "main" java.lang.IllegalStateException: Something wrong
-	at ru.test.App.main(App.java:9)
-```
-А вот это уже интереснее. Тут есть два главных слова: **thread** и **main**.
-Поиска в гугле "java api thread" находим ссылку на Java API: [java.lang.Thread](https://docs.oracle.com/javase/7/docs/api/java/lang/Thread.html).
-Тут важно понять то, что когда запускается JVM, а в ней наша программа, у нас всегда есть хотя бы один поток. И как правило поток, в котором начинается выполнение нашей программы, называется **main**.
-Интересно, что у класса **java.lang.Thread** есть несколько статических методов, которые могут помочь понять, что вообще происходит "под капотом".
-Например:
-```java
-for (Thread thread : Thread.getAllStackTraces().keySet()) {
-	System.out.println(thread);
-}
-```
-Оказывается, при запуске Java программы запускается даже не один, а несколько потоков!
-Но почему тогда программа завершается? Если мы внимательно читали, мы помним фразу из Java API для класса Thread:
-```
-All threads that are not daemon threads have died
-```
-Отыскав нужный метод, чуть модифицируем наш код:
-```java
-for (Thread thread : Thread.getAllStackTraces().keySet()) {
-	if (!thread.isDaemon()) {
-		System.out.println(thread);
-	}
-}
-```
-И действительно, из всех потоков только main наш является не демон потоком. Поэтому, когда он завершается, то завершается и выполнение всех остальных потоков. А с этим завершается и выполнение программы.
+То есть когда в JVM запускается новый java процесс, то у нас выполнение начинается с создания одного не демон потока (**non-daemon thread**), который обычно имеет имя **main**.
+Когда все не демон потоки завершатся - завершится и java процесс.
+
+Чтобы остановить наш Build процесс в sublime Text мы можем нажать **Ctrl+Break** или убить процесс (в Windows это taskkill /pid НомерПроцесса).
 
 У Oracle есть целый раздел, посвящённый многопоточности: "[Lesson: Concurrency](https://docs.oracle.com/javase/tutorial/essential/concurrency/index.html)".
 
 ## [↑](#Home) <a name="Thread"></a> Thread
-Итак, в языке java поток описывается классом Thread. Он не является самим потоком, но позволяет управлять потоком, который он представляет.
-Поток, как мы видели, может быть демон потоком, а может и не быть.
+Итак, мы узнали, что Java программа - это некий процесс, внутри которого существует набор потоков. Поток описывается классом Thread.
+Ещё раз посмотрим на java api данного класса: [Thread class](https://docs.oracle.com/javase/7/docs/api/java/lang/Thread.html). Мы увидим, что данный класс имеет набор статических методов. Одним из них является метод [currentThread](https://docs.oracle.com/javase/7/docs/api/java/lang/Thread.html#currentThread(). Собственно, он возвращает ссылку на текущий поток. Таким образом, мы можем получить различные данные текущего потока: демон ли он, в каком состоянии и т.д.:
+```java
+public static void main(String[] args) {
+	Thread thread = Thread.currentThread();
+	System.out.println("Name: " + thread.getName());
+	System.out.println("isDaemon: " + thread.isDaemon());
+	System.out.println("Group: " + thread.getThreadGroup());
+}
+```
+Или можем, например, вывести все потоки, которые не демоны:
+```java
+public static void main(String[] args) {
+	for (Thread thread : Thread.getAllStackTraces().keySet()) {
+		if (!thread.isDaemon()) {
+			System.out.println(thread);
+		}
+	}
+}
+```
+И действительно, из всех потоков только **main** наш является не демон потоком. Поэтому, когда он завершается, то завершается и выполнение всех остальных потоков. А с этим завершается и выполнение программы, т.е. завершается процесс.
+
 **Daemon Threads** (Демон потоки) - это служебные потоки. Они не должны выполнять занятие каких-либо ресурсов, т.к. их остановка может произойти в любой момент времени и корректное завершение работы не гарантируется. Поэтому, стоит избегать использования каких либо ресурсов во избежании нарушения целостности данных.
-**java.lang.ThreadGroup** - Потоки организованы в группы. Каждая поток присоединён к какой-либо группе. Это позволяет получить список потоков группы. Группы могут образовывать иерархию по типу Родительский элемент - дочерние элементы. 
+```java
+System.out.println(Thread.currentThread().isDaemon());
+```
+
+**java.lang.ThreadGroup** - Потоки организованы в группы. Каждая поток присоединён к какой-либо группе. Это позволяет получить список потоков группы. Группы могут образовывать иерархию по типу Родительский элемент - дочерние элементы.
 Пример получения названия группы текущего потока:
 ```java
 System.out.println(Thread.currentThread().getThreadGroup());
@@ -73,7 +106,7 @@ System.out.println(Thread.currentThread().getThreadGroup());
 ```java
 Thread.currentThread().getState()
 ```
-Thread.State - это enum со следующими значениями:
+**Thread.State** - это enum со следующими значениями:
 - NEW : Поток только что создан)
 - RUNNABLE : Поток запустили (но не говорит, что он сейчас выполняется)
 - BLOCKED : Блокирован другим потоком (ожидает монитор, занятый другим потоком)
@@ -85,12 +118,15 @@ Thread.State - это enum со следующими значениями:
 Thread thread = new Thread();
 thread.start();
 ```
-Если мы посмотрим, то thread.start вызывает метод **thread.run**, который обращается к внутреннему полю target, где лежит некое **Runnable**.
-Сам запуск потока так просто не посмотреть, т.к. это низкоуровневый механизм, поэтому метод start указан как native.
+Важно, что именно этот метод, запустить, стартовать, **start** создаёт новый поток. Он выполняет некоторые проверки, работу с группами и запускает private native метод start, который и выполняет всю работу по управлению созданием потока и выполняет после этого в новом потоке метод **thread.run**.
+У класса Thread есть так же метод метод **thread.run**, который обращается к внутреннему полю **target** (т.е. цель потока), где лежит некое **Runnable**.
+Поэтому, выполнение метода run вручную не приведёт к созданию нового потока.
+Одним из способов создания потока - унаследоваться от Thread и переопределить метод run, затем вызывая метод start у потока. Но это накладывает ограничение на иерархию, да и не так гибко. Поэтому рекомендуется использовать другой способ - при создании потока использовать **Runnable**.
 
 ## [↑](#Home) <a name="Runnable"></a> Runnable
-Итак, Thread описывает некий выполняющийся поток. Поток можем начать, для этого есть метод **start**. Это должно запустить что-то. Поэтому, при создании потока мы можем указать то, что должно запускаться. Для описания этого существует интерфейс **[java.lang.Runnable](https://docs.oracle.com/javase/7/docs/api/java/lang/Runnable.html)**.
-Да, мы должны реализовать некоторую логику, иимплементируя данный интерфейс. 
+Итак, Thread описывает некий выполняющийся поток. Поток можем начать, для этого есть метод **start**. У потока есть некоторая задача, task, который данный поток должен выполнить. Поэтому, при создании потока мы можем указать то, что должно запускаться, то есть мы хотим Run чего-то, что будет Runnable. Для описания этого существует интерфейс **[java.lang.Runnable](https://docs.oracle.com/javase/7/docs/api/java/lang/Runnable.html)**.
+
+Да, мы должны реализовать некоторую логику, иимплементируя данный интерфейс.
 Например:
 ```java
 public static void main(String[] args) {
@@ -113,11 +149,19 @@ public static void main(String[] args) {
 ```
 Пустые скобки показывают, что у нас нет входных аргументов.
 
-
-
 ## [↑](#Home) <a name="Callable"></a> Callable and FutureTask
-У Runnable есть брат блезнец - **[java.util.concurrent.Callable](https://docs.oracle.com/javase/7/docs/api/java/util/concurrent/Callable.html)**.
+Runnable это хорошо. Но что, если мы хотим получить результат выполнения? Просто объявить внешнюю для Runnable переменную не выйдет, мы получим ошибку:
+```
+Variable такая-то is accessed from within inner class, needs to be final or effectively final
+```
+А если мы хотим получить String? Уже не выйдет. Можно использовать массив из одного элемента или какой-нибудь ещё final контейнер, внутри которого мы будем менять значение. Но попахивает это всё как-то плохо. Разработчики языка Java подумали так же и ввели ещё один интерфейс - **[java.util.concurrent.Callable](https://docs.oracle.com/javase/7/docs/api/java/util/concurrent/Callable.html)**.
 Отличается от Runnable тем, что он возвращает результат.
+Так же есть особенность, если обратить внимание на то, что:
+```
+call() throws Exception;
+```
+То есть исключения внутри данного метода можно не обрабатывать. Чего не скажешь про Runnable и его метод run.
+
 Кроме того, просто так Callable нельзя использовать, т.е. Thread в конструктор принимает только Runnable. Для того, чтобы Callable использовать в Thread необходимо использовать его как часть класса **[java.util.concurrent.FutureTask](https://docs.oracle.com/javase/7/docs/api/java/util/concurrent/FutureTask.html)**.
 **FutureTask** - представляет из себя задачу (Task), которая будет выполнена где-то в будущем (Future).
 FutureTask может быть создан как по Callable, так и по Runnable.
@@ -142,7 +186,7 @@ public static void main(String[] args) {
 }
 ```
 Как мы видим, мы обязаны обработать два разных исключения: **InterruptedException** и  **ExecutionException**.
-Первое связано с тем, что когда мы вызываем get, то мы останавливаем выполнение текущего потока до того времени, пока не получим данные из futureTask. То есть выполнение становится синхронным. Соответственно, мы можем в этот момент получить сообщение о том, что наш поток должен прервать своё выполнение, поэтому мч должны обработать Interrupt.
+Первое связано с тем, что когда мы вызываем get, то мы останавливаем выполнение текущего потока до того времени, пока не получим данные из futureTask. То есть выполнение становится синхронным. Соответственно, мы можем в этот момент получить сообщение о том, что наш поток должен прервать своё выполнение, поэтому мч должны обработать **Interrupt**.
 Второе исключение связано с тем, что Callable предоставляется метод call, который обязывает обрабатывать Exception. Т.е. при выполнении может возникнуть исключения ситуация, о которой мы должны позаботиться.
 
 У FutureTask есть так же есть полезные методы, которые позволяют:
@@ -181,49 +225,59 @@ FutureTask<Boolean> futureTask = new FutureTask(task, true);
 ## [↑](#Home) <a name="Executor"></a> Executor
 Начиная с Java 1.5 люди поняли, что как-то свалено в одну кучу создание потоков, логика их выполнения, отправление вообще задач в потоки. Хотелось как-то это всё разделить.
 И выразили это желание в виде интерфейса [Executor](https://docs.oracle.com/javase/7/docs/api/java/util/concurrent/Executor.html).
-Соответственно, интерфейс **Executor** имеет всего один метод **execute**, который на вход принимает runnable.
+Соответственно, интерфейс **Executor** имеет всего один метод **execute**, который на вход принимает **runnable**.
 Предполагается, что любая реализация может по какой-то причине отклонить выполнение задачи и бросить RuntimeException: **RejectedExecutionException**.
-
-У данного интерфейса есть реализация - **ThreadPoolExecutor**.
-Пример инициализации ThreadPoolExecutor'а:
+Самая примитивная реализация из JavaDoc:
 ```java
-int startPoolSize = 1;
-int maximumPoolSize = 2;
-long keelAliveTime = 1;
-BlockingQueue<Runnable> workQueue = new ArrayBlockingQueue<>(1);
-Executor executor;
-executor = new ThreadPoolExecutor(startPoolSize, maximumPoolSize, keelAliveTime, TimeUnit.SECONDS, workQueue);
-```
-То есть у ThreadPoolExecutor - это представление некоторого пула потоков, у которого есть начальный размер и максимальный. Если потоков не будет хватать, то будут создаваться новые. Если поток простаивает, то после истечения времени жизни он будет убит. Ну и каждый пул должен где-то хранить задачи. Соответственно, мы должны указать блокирующуяся очередь, на основе которой данный пул будет работать.
-
-Для того, чтобы отправить Runnable на выполнение в поток достаточно:
-```java
-Runnable task = () -> {
-	try {
-		Thread.currentThread().sleep(3000);
-	} catch (InterruptedException e) {
-		System.out.println("Interrupted");
+public static void main(String[] args) {
+	class ThreadPerTaskExecutor implements Executor {
+		public void execute(Runnable r) {
+			new Thread(r).start();
+		}
 	}
-	System.out.println("Hello World");
-};
-for (int i = 0; i < 10; i++) {
-	System.out.println(i);
+	Runnable task = () -> System.out.println("Hello, World!");
+	Executor executor = new ThreadPerTaskExecutor();
 	executor.execute(task);
 }
 ```
-Будет выброшено RejectedExecutionException:
-> Exception thrown by an {@link Executor} when a task cannot be accepted for execution.
 
-Это отличный пример того, что может произойти плохого. Мы получим исключение:
+## [↑](#Home) <a name="ThreadPoolExecutor"></a> ThreadPoolExecutor
+У интерфейса **Executor** есть реализация - **ThreadPoolExecutor**.
+
+Пример инициализации ThreadPoolExecutor'а:
+```java
+public static void main(String[] args) {
+	int startSize = 1;
+	int maxSize = 5;
+	long keelAliveTime = 1;
+	BlockingQueue<Runnable> workQueue = new ArrayBlockingQueue<>(7);
+	Executor executor;
+	executor = new ThreadPoolExecutor(startSize, maxSize, keelAliveTime, 				TimeUnit.SECONDS, workQueue);
+
+	Runnable task = () -> System.err.println(Thread.currentThread().getName());
+	for (int i = 0; i < 11; i++){
+		executor.execute(task);
+	}
+}
 ```
-java.util.concurrent.RejectedExecutionException: Task ru.test.App$$Lambda$1/990368553@3d075dc0 rejected from java.util.concurrent.ThreadPoolExecutor@214c265e[Running, pool size = 2, active threads = 2, queued tasks = 1, completed tasks = 0]
+На данном примере становится понятно, как работает ThreadPoolExecutor сам по себе. Во-первых, у него есть начальный размер и макисмлаьный. Во-вторых, у него есть некоторая очередь, в которую складыываются выполняемые задачи. Если указанное кол-во потоков справляются с задачами - пул не будет расширятся. Например, если изменить в примере 7 на 77, то ThreadPoolExecutor будет выполнять задачи в одном потоке. Но как только задач станет столько, что с ними не будет справляться один поток - в пуле будет создан новый поток.
+
+Вспомним так же про RejectedExecutionException. Если в пуле заняты все потоки, а очередь полная, то пул больше не может принимать задачи, о чём он скажет через исключение:
+```java
+for (int i = 0; i < 111; i++){
+	executor.execute(task);
+}
 ```
-Как видно, проблема проявляется на 4той итерации. При лимите в 2 потока первые две итерации отправили потоки на выполнение. Размер очереди у нас один. То есть очередь заполнилась полностью на третьей итерации. А четвёртая итерация падает с ошибкой, т.к. пул потоков пуст, очередь полностью забита и задачу некуда деть.
-Тут важно то, что статус = Running.
+
+Это отличный пример того, что может произойти плохого. Мы получим исключение вида:
+```
+java.util.concurrent.RejectedExecutionException: Task ru.test.App$$Lambda$1/990368553@7cca494b rejected from java.util.concurrent.ThreadPoolExecutor@7ba4f24f[Running, pool size = 5, active threads = 4, queued tasks = 7, completed tasks = 8]
+```
+Как видно в примере, у нас размер пула 5, в нём 4 активных потока. В очереди скопилось 7 задач и ещё из пула не успели взять задачу, а мы туда уже добавляем новую. Добавлять некуда, поэтому получаем ошибку.
 
 То есть работа регулируется двумя очередям:
 - Очередь потоков (регулируется размером пула)
-- Блокирующаяся очередь (размер очереди)
+- Блокирующаяся очередь (размер очереди ожидающих задач)
 
 ThreadPoolExecutor позволяет так же указать:
 - ThreadFactory, требует реализовать:
@@ -232,51 +286,69 @@ ThreadPoolExecutor позволяет так же указать:
 ```void rejectedExecution(Runnable r, ThreadPoolExecutor executor)```
 
 ## [↑](#Home) <a name="ExecutorService"></a> Executor Service
-На самом деле, все реализации Executor'а так же являются реализацией другого интерфейса, а именно: [java.util.concurrent.ExecutorService](https://docs.oracle.com/javase/7/docs/api/java/util/concurrent/ExecutorService.html).
-Он позволяет управлять временем жизни задач и отслеживать прогресс задач.
+Executor это хорошо, но мало. Одним методом execute Runnable сыт не будешь. А если захочется получить результат, то придётся самим создавать FutureTask. И поэтому решили расширить Executor до [java.util.concurrent.ExecutorService](https://docs.oracle.com/javase/7/docs/api/java/util/concurrent/ExecutorService.html).
+Как сказано в его JavaDoc, он позволяет управлять временем жизни задач и отслеживать прогресс задач. К методу **execute** добавляются новые методы для отправки задач.
 Для отправки задач используются следующие варианты:
 - <T> Future<T>	submit(Callable<T> task)
 - <T> Future<T>	submit(Runnable task, T result)
 - Future submit(Runnable task)
+Мы получаем автоматически тот самый Future Callable и Runnable. Плюс для Runnable мы можем сами задать ответ в случае, если он выполнен успешно.
 
 Таким образом, в отличии от Executor, ExecutorService возвращает Future, от которого можно дожидаться результата.
 
-Так же предоставляются методы прекращения работы:
-- shutdown
-- shutdownNow (возврщает список Runnable, которые лежали в очереди на исполнение в момент выполнения метода shutdownNow)
+Второй важнейшей особенностью является управление временем жизни самого пула, который лежит в основе ExecutorService. Интерфейс Executor не предоставляет такой возможности. Это приводит к тому, что если все задачи выполнены, интерфейс Executor вынуждает нас ожидать наступление keepAliveTimeout'а. Ну а если он не задан - всё плохо. Наш процесс не завершится.
+Поэтому, нам предоставляются методы прекращения работы:
+- **shutdown**
+- **shutdownNow** (возврщает список Runnable, которые лежали в очереди на исполнение в момент выполнения метода shutdownNow)
 
 Важно не путать ошибку при сабмите задач при остановленном Executor'е. Вместо **Running** мы увидим **Shutting down**.
 
 Есть так же более мягкий способ остановки:
-- awaitTermination(long timeout, java.util.concurrent.TimeUnit unit)
-
+- **awaitTermination(long timeout, java.util.concurrent.TimeUnit unit)**
 Данный метод приостанавливает текущий поток и ждёт, пока выполнятся все потоки в Executor'е. Если наступает таймаут, а потоки ещё работают - Executor будет остановлен.
 
 Так же интересные варианты:
-- invokeAll (возвращает список Future)
-- invokeAny (возвращает первый выполненный Future)
+- **invokeAll** (возвращает список Future)
+- **invokeAny** (возвращает первый выполненный Future)
 
 Оба метода имеют вариант обычный и с указанием таймаута. Если таймаут наступает - всё что не выполнено становится cancelled.
 
-Позволяет использовать следующие удобные статичные методы для создания ExecutorService'ов:
-```java
-// Only one thread with runnable queue with size: Integer.MAX_VALUE
-ExecutorService executor = Executors.newSingleThreadExecutor(); // keepAlive = 0
-// SynchronousQueue doesn't has capacity. Each put wait unless another thread is trying to remove it
-ExecutorService executor2 = Executors.newCachedThreadPool(); //keepAlive = 60 sec
-// Normal queus (LinkedBlockingQueue) with size
-ExecutorService executor3 = Executors.newFixedThreadPool(4); // keepAliveTime 0
-```
+## [↑](#Home) <a name="ExecutorServiceStaticMethods"></a> Executor Service Static Methods
+Чтобы получить экземпляр ExecutorService есть вспомогательный класс - [Executors](https://docs.oracle.com/javase/7/docs/api/java/util/concurrent/Executors.html).
+Он состоит из набора статических методов для наиболее частых случаев использования ExecutorService'ов.
+Например:
+- ExecutorService executor = **Executors.newSingleThreadExecutor()**;
+В основе лежит **LinkedBlockingQueue** размером в максимальное значение Integer.
+Потоки не имеют таймаута, поэтому однажды создав их, они сами по себе не "умрут". Нужно не забывать останавливать executor.
+Размер пула строго 1 поток.
+- ExecutorService executor = **Executors.newFixedThreadPool(4)**;
+В основе лежит так же **LinkedBlockingQueue**, но размер его ограничен.
+Потоки не имеют таймаута бездействия, т.е. живут пока не выключат executor.
+- ExecutorService executor = **Executors.newCachedThreadPool()**;
+Рекомендуется к использованию, когда есть много короткоживущих задач.
+В основе лежит **SynchronousQueue**, у которого нет размера. Эта очередь называется синхронной, т.к. поток который кладёт данные ожидает пока эти данные не заберут (и наоборот).
+Размер пула потоков от 1 до Integer.MAX_VALUE.
+Время жизни юездействующего потока = 1 минута.
+- ExecutorService executor = **Executors.newScheduledThreadPool(2)**;
+В основе лежит **DelayedWorkQueue**. Это специальный внутренний класс для хранения задач, которые необходимо выполнить по расписанию по определённому условию. И хранит он RunnableScheduledFutures, несмотря на то, что сам executor получил на вход всё тот же Runnable или Callable.
+Чтобы использовать всю прелесть ScheduledThreadPool'а необходимо использовать вместо интерфейса ExecutorService интерфейс ScheduledExecutorService.
 
 ## [↑](#Home) <a name="ScheduledExecutorService"></a> ScheduledExecutorService
-ExecutorService может выполнять задачи и по расписанию.
-Для этого служит [ScheduledExecutorService](https://docs.oracle.com/javase/7/docs/api/java/util/concurrent/ScheduledExecutorService.html).
-Его методы возвращают не просто Future, а **ScheduledFuture**.
-Метод schedule позволяет отправить задачу, которая будет отдана на выполнение через указанный промежуток времени. Соответственно, можем передать или Callable или Runnable.
-Например:
+Часто приходится выполнять задачи по расписанию. И чтобы упростить жизнь, разработчики языка Java решили расширить возможности [ScheduledExecutorService](https://docs.oracle.com/javase/7/docs/api/java/util/concurrent/ScheduledExecutorService.html), чтобы каждый прикладной разработчик не писал заново и заново однообразный рутинный код.
+
+Методы [ScheduledExecutorService](https://docs.oracle.com/javase/7/docs/api/java/util/concurrent/ScheduledExecutorService.html) возвращают не просто Future, а **[ScheduledFuture](https://docs.oracle.com/javase/7/docs/api/java/util/concurrent/ScheduledFuture.html)**.
+Метод **schedule** (запланировать) позволяет отправить задачу, которая будет отдана на выполнение через указанный промежуток времени. Соответственно, можем передать или Callable или Runnable.
 ```java
 schedule(Callable<V> callable, long delay, TimeUnit unit)
 ```
+Пример кода:
+```java
+ScheduledExecutorService executor = Executors.newScheduledThreadPool(2);
+Runnable task = () -> System.out.println(Thread.currentThread().getName());
+ScheduledFuture future = executor.schedule(task, 1, TimeUnit.SECONDS);
+executor.shutdown();
+```
+
 А так же доступны ещё два метода:
 - ScheduledFuture<?> scheduleAtFixedRate(Runnable command, long initialDelay, long period, TimeUnit unit)
 - ScheduledFuture<?> scheduleWithFixedDelay(Runnable command, long initialDelay, long delay, TimeUnit unit)
